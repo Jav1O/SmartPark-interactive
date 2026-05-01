@@ -374,13 +374,15 @@ function getLocalIP() {
 const localIP = getLocalIP();
 
 httpServer.listen(PORT_HTTP, () => {
-  console.log(`\n🚗 SmartPark servidor HTTP iniciado en puerto ${PORT_HTTP}`);
-  console.log(`   → http://${localIP}:${PORT_HTTP}/conductor.html  (Sin cámara)`);
+  console.log(`\n🚗 SmartPark - Acceso desde este ordenador:`);
+  console.log(`   → http://localhost:${PORT_HTTP}/conductor.html`);
 });
 
 httpsServer.listen(PORT_HTTPS, () => {
-  console.log(`\n🔒 SmartPark servidor HTTPS iniciado en puerto ${PORT_HTTPS}`);
-  console.log(`   → https://${localIP}:${PORT_HTTPS}/conductor.html  (Con cámara y GPS)`);
-  console.log(`   → https://${localIP}:${PORT_HTTPS}/panel.html      (Panel)`);
+  console.log(`\n📱 Acceso desde el Móvil (Recomendado):`);
+  console.log(`   1. Abre otra terminal y escribe: ssh -R 80:localhost:${PORT_HTTP} serveo.net`);
+  console.log(`   2. Entra en la URL del túnel acabada en /conductor.html`);
+  console.log(`\n🔗 Acceso por IP local (Solo si el Firewall lo permite):`);
+  console.log(`   → https://${localIP}:${PORT_HTTPS}/conductor.html`);
   console.log(`\n⚠️  En el móvil, ignora la advertencia de certificado "No seguro".\n`);
 });
