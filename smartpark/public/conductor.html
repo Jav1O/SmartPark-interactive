@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartPark — Conductor</title>
+    <meta name="description" content="SmartPark: Sistema de parking inteligente controlado por voz y gestos">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Leaflet CSS y JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    
+    <!-- Leaflet Routing Machine -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
+    <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
+    <link rel="stylesheet" href="conductor.css">
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+
+    <!-- Header -->
+    <header id="header">
+        <div class="header-left">
+            <div class="logo">
+                <span class="logo-icon">🅿️</span>
+                <span class="logo-text">SmartPark</span>
+            </div>
+            <span class="connection-status" id="connectionStatus">
+                <span class="status-dot"></span>
+                Conectando...
+            </span>
+        </div>
+        <div class="header-right">
+            <button class="btn-urgent" id="btnUrgent" title="Modo Urgente">
+                🚨 URGENTE
+            </button>
+        </div>
+    </header>
+
+    <!-- Barra de estado de voz y gestos -->
+    <div class="interaction-bar" id="interactionBar">
+        <div class="voice-indicator" id="voiceIndicator">
+            <div class="mic-icon" id="micIcon">🎙️</div>
+            <span id="voiceStatus">Pulsa para activar voz</span>
+        </div>
+        <div class="gesture-indicator" id="gestureIndicator">
+            <div class="hand-icon">✋</div>
+            <span id="gestureStatus">Gestos: desactivados</span>
+        </div>
+    </div>
+
+    <!-- Feedback flotante de comandos -->
+    <div class="command-feedback" id="commandFeedback">
+        <span id="commandText"></span>
+    </div>
+
+    <!-- Contenido principal -->
+    <main id="mainContent">
+
+        <!-- Vista: Lista de parkings -->
+        <section class="view active" id="viewParkingList">
+            <div class="section-title">
+                <h1>Parkings cercanos</h1>
+                <p class="subtitle">Di <em>"buscar aparcamiento"</em> o navega con gestos</p>
+            </div>
+            <div class="parking-cards" id="parkingCards">
+                <!-- Se rellena dinámicamente -->
+                <div class="loading-placeholder">
+                    <div class="spinner"></div>
+                    <p>Buscando parkings cercanos...</p>
+                </div>
+            </div>
+            <div class="nav-hint">
+                <span>👆 <em>"siguiente"</em> / <em>"anterior"</em> para navegar</span>
+                <span>👍 <em>"reservar"</em> para reservar plaza</span>
+            </div>
+        </section>
+
+        <!-- Vista: Detalle de parking + reserva -->
+        <section class="view" id="viewParkingDetail">
+            <button class="btn-back" id="btnBack">← Volver</button>
+            <div class="parking-detail-card" id="parkingDetailCard">
+                <!-- Se rellena dinámicamente -->
+            </div>
+            
+            <div class="detail-map-container" id="detailMapContainer" style="margin: 1rem 0; height: 250px; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+                <div id="detailMap" style="height: 100%; width: 100%;"></div>
+            </div>
+
+            <div class="spots-grid" id="spotsGrid">
+                <!-- Mapa de plazas -->
+            </div>
+        </section>
+
+        <!-- Vista: Reserva / Navegación hacia el parking -->
+        <section class="view" id="viewNavigation">
+            <div class="nav-header">
+                <div class="nav-info-block">
+                    <h2 id="navTitle">Navegando a...</h2>
+                    <p class="nav-spot-info" id="navSpotInfo">Plaza: ---</p>
+                </div>
+                <div class="nav-distance-block">
+                    <div class="distance-value" id="navDistanceValue">--</div>
+                    <div class="distance-unit">metros</div>
+                </div>
+            </div>
+            
+            <div class="nav-map-container" id="navMapContainer" style="height: 350px; margin: 1rem 0; border-radius: 12px; overflow: hidden; border: 2px solid var(--accent-blue);">
+                <div id="navMap" style="height: 100%; width: 100%;"></div>
+            </div>
+
+            <div class="nav-status-bar" id="navStatusBar">
+                <div class="nav-status-icon">📍</div>
+                <span id="navStatusText">Obteniendo ubicación...</span>
+            </div>
+
+            <div class="nav-bottom-actions">
+                <button class="btn-arrived" id="btnArrived" disabled>
+                    🏁 He llegado
+                </button>
+                <button class="btn-cancel-nav" id="btnCancelNav">
+                    ❌ Cancelar
+                </button>
+            </div>
+            <p class="nav-voice-hint">Di <em>"he llegado"</em> o <em>"cancelar"</em></p>
+        </section>
+
+        <!-- Vista: Llegada confirmada (Muestra mapa de la plaza) -->
+        <section class="view" id="viewArrived">
+            <div class="arrived-card">
+                <div class="arrived-icon">🎉</div>
+                <h2 id="arrivedTitle">¡Has llegado!</h2>
+                <p class="arrived-detail" id="arrivedDetail"></p>
+                <div class="arrived-spot-map" id="arrivedSpotMap">
+                    <!-- Muestra la ubicacion visual de la plaza dentro del parking -->
+                </div>
+                <button class="btn-finish" id="btnFinish">✅ Finalizar</button>
+            </div>
+        </section>
+
+        <!-- Vista: Reserva activa (Antigua) -->
+        <section class="view" id="viewReservation">
+            <div class="reservation-card" id="reservationCard">
+                <div class="reservation-icon">🎫</div>
+                <h2 id="reservationTitle">Plaza reservada</h2>
+                <p class="reservation-detail" id="reservationDetail"></p>
+                <div class="reservation-timer" id="reservationTimer">03:00</div>
+                <div class="reservation-actions">
+                    <button class="btn-confirm" id="btnConfirm">✅ Confirmar</button>
+                    <button class="btn-cancel" id="btnCancel">❌ Cancelar</button>
+                </div>
+                <p class="reservation-hint">Di <em>"confirmar"</em> o <em>"cancelar"</em></p>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Webcam para gestos (MediaPipe) -->
+    <div class="webcam-container" id="webcamContainer">
+        <video id="webcam" autoplay playsinline></video>
+        <canvas id="gestureCanvas"></canvas>
+        <button class="btn-toggle-cam" id="btnToggleCam" title="Activar/Desactivar cámara">
+            📷
+        </button>
+        <div class="gesture-label" id="gestureLabel"></div>
+        <div class="confidence-bar">
+            <div class="confidence-fill" id="gestureConfidence"></div>
+        </div>
+    </div>
+
+    <!-- Controles de accesibilidad -->
+    <div class="controls-bar" id="controlsBar">
+        <button class="control-btn" id="btnVoice" title="Activar reconocimiento de voz">
+            <span class="control-icon">🎙️</span>
+            <span class="control-label">Voz</span>
+        </button>
+        <button class="control-btn" id="btnGestures" title="Activar gestos con la mano">
+            <span class="control-icon">✋</span>
+            <span class="control-label">Gestos</span>
+        </button>
+        <button class="control-btn" id="btnLocation" title="Activar GPS">
+            <span class="control-icon">📍</span>
+            <span class="control-label">GPS</span>
+        </button>
+        <button class="control-btn" id="btnSearch" title="Buscar parkings">
+            <span class="control-icon">🔍</span>
+            <span class="control-label">Buscar</span>
+        </button>
+    </div>
+
+    <script type="module" src="conductor.js"></script>
+</body>
+</html>
