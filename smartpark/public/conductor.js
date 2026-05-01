@@ -5,8 +5,16 @@ import {
   HandLandmarker,
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest";
 
-// Conexion al servidor
-const socket = io();
+// Conexion al servidor: mismo origen que la URL abierta en el movil o PC
+const socket = io(window.location.origin, {
+  transports: ['polling', 'websocket'],
+});
+const secureContext = window.isSecureContext;
+const runtimeCapabilities = {
+  camera: Boolean(navigator.mediaDevices?.getUserMedia),
+  geolocation: Boolean(navigator.geolocation),
+  voiceRecognition: Boolean(window.SpeechRecognition || window.webkitSpeechRecognition),
+};
 
 // Estado general de la app
 const state = {
@@ -115,6 +123,41 @@ const els = {
   micIcon: $('#micIcon'),
 };
 
+function showRuntimeWarning(message) {
+  console.warn(message);
+  showCommandFeedback(`⚠️ ${message}`);
+}
+
+function requireSecureContext(featureLabel) {
+  if (secureContext) return true;
+  showRuntimeWarning(`Abre SmartPark con HTTPS para usar ${featureLabel}.`);
+  return false;
+}
+
+function featureUnavailable(featureLabel, details) {
+  const message = details
+    ? `${featureLabel} no disponible: ${details}`
+    : `${featureLabel} no está disponible en este navegador.`;
+  showRuntimeWarning(message);
+  speak(message);
+}
+
+function showStartupHints() {
+  if (!secureContext) {
+    els.voiceStatus.textContent = 'Se necesita HTTPS en móvil';
+    els.gestureStatus.textContent = 'Gestos requieren HTTPS';
+    showRuntimeWarning('Abre la app desde una URL HTTPS para usar voz, cámara y GPS en el móvil.');
+  }
+
+  if (!runtimeCapabilities.voiceRecognition) {
+    els.voiceStatus.textContent = 'Voz no compatible';
+  }
+
+  if (!runtimeCapabilities.camera) {
+    els.gestureStatus.textContent = 'Cámara no compatible';
+  }
+}
+
 // Eventos de conexion Socket.IO
 
 socket.on('connect', () => {
@@ -130,6 +173,11 @@ socket.on('connect', () => {
 socket.on('disconnect', () => {
   els.connectionStatus.classList.remove('connected');
   els.connectionStatus.querySelector('span:last-child').textContent = 'Desconectado';
+});
+
+socket.on('connect_error', (error) => {
+  console.error('❌ Error conectando con Socket.IO:', error);
+  showRuntimeWarning('No se pudo conectar con el servidor. Revisa la URL publica del tunel o la red local.');
 });
 
 // Recibir lista de parkings
@@ -242,8 +290,12 @@ const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecogni
 let recognition = null;
 
 function startVoiceRecognition() {
-  if (!SpeechRecognition) {
-    speak('Tu navegador no soporta reconocimiento de voz.');
+  if (!requireSecureContext('el reconocimiento de voz')) {
+    return;
+  }
+
+  if (!SpeechRecognition || !runtimeCapabilities.voiceRecognition) {
+    featureUnavailable('Reconocimiento de voz', 'tu navegador no lo soporta');
     return;
   }
 
@@ -277,6 +329,9 @@ function startVoiceRecognition() {
     console.log('❌ Error de voz:', event.error);
     if (event.error === 'no-speech') {
       // Reiniciar silenciosamente
+    } else if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+      els.voiceStatus.textContent = 'Permiso de microfono denegado';
+      showRuntimeWarning('Debes permitir el microfono para usar la voz.');
     } else {
       els.voiceStatus.textContent = `Error: ${event.error}`;
     }
@@ -425,6 +480,15 @@ async function initHandLandmarker() {
 async function startGestureDetection() {
   if (state.gesturesActive) {
     stopGestureDetection();
+    return;
+  }
+
+  if (!requireSecureContext('la camara y los gestos')) {
+    return;
+  }
+
+  if (!runtimeCapabilities.camera) {
+    featureUnavailable('Camara', 'navigator.mediaDevices.getUserMedia no esta disponible');
     return;
   }
 
@@ -1195,8 +1259,12 @@ if (els.btnFinish) {
 // === GEOLOCALIZACION ===
 
 function startGeolocation() {
-  if (!navigator.geolocation) {
-    speak('Tu dispositivo no soporta geolocalización.');
+  if (!requireSecureContext('el GPS')) {
+    return;
+  }
+
+  if (!runtimeCapabilities.geolocation) {
+    featureUnavailable('Geolocalizacion', 'tu dispositivo o navegador no la soporta');
     return;
   }
   if (state.geoActive) {
@@ -1223,6 +1291,9 @@ function startGeolocation() {
     (error) => {
       console.error('❌ Error GPS:', error.message);
       els.navStatusText && (els.navStatusText.textContent = 'Error obteniendo ubicación');
+      if (error.code === error.PERMISSION_DENIED) {
+        showRuntimeWarning('Debes permitir la ubicacion para usar la navegacion en el movil.');
+      }
     },
     { enableHighAccuracy: false, maximumAge: 0, timeout: 27000 }
   );
@@ -1425,3 +1496,4 @@ socket.on('parkingDetail', (data) => {
 // Inicio
 
 console.log('🚗 SmartPark Conductor inicializado');
+showStartupHints();

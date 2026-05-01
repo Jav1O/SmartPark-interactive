@@ -7,6 +7,10 @@ import os from 'node:os';
 
 const app = express();
 const httpServer = createHttpServer(app);
+const PORT_HTTP = Number(process.env.PORT_HTTP || 3000);
+const PORT_HTTPS = Number(process.env.PORT_HTTPS || 3443);
+const PUBLIC_URL = process.env.PUBLIC_URL || '';
+const TUNNEL_COMMAND = process.env.TUNNEL_COMMAND || '';
 
 // Generar certificado SSL
 const attrs = [{ name: 'commonName', value: 'localhost' }];
@@ -20,9 +24,6 @@ const httpsServer = createHttpsServer({
 const io = new Server();
 io.attach(httpServer);
 io.attach(httpsServer);
-
-const PORT_HTTP = 3000;
-const PORT_HTTPS = 3443;
 
 // Redirigir la raíz a la página del conductor
 app.get('/', (req, res) => {
@@ -126,7 +127,6 @@ setInterval(() => {
   });
 }, 10000);
 
-// Archivos estaticos
 // Calcula la distancia usando la formula de Haversine (en metros)
 function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371e3;
@@ -141,8 +141,6 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 }
-
-app.use(express.static('public'));
 
 // Conexiones Socket.IO
 io.on('connection', (socket) => {
@@ -379,19 +377,42 @@ function getLocalIP() {
 }
 
 const localIP = getLocalIP();
+const localHttpUrl = `http://localhost:${PORT_HTTP}/conductor.html`;
+const localHttpsUrl = `https://${localIP}:${PORT_HTTPS}/conductor.html`;
+
+function logMobileAccessInfo() {
+  console.log('\n📱 ACCESO DESDE EL MÓVIL:');
+
+  if (PUBLIC_URL) {
+    console.log('   URL pública configurada:');
+    console.log(`   → ${PUBLIC_URL}`);
+    console.log('   Usa esta URL para abrir SmartPark en el móvil con HTTPS.');
+  } else if (TUNNEL_COMMAND) {
+    console.log('   1. Abre otra terminal y ejecuta tu túnel HTTPS:');
+    console.log(`      ${TUNNEL_COMMAND}`);
+    console.log('   2. Copia la URL pública HTTPS que te devuelva el túnel.');
+    console.log('   3. Reinicia el servidor con PUBLIC_URL para que esta terminal anuncie la URL final.');
+    console.log('      Ejemplo:');
+    console.log('      PUBLIC_URL="https://tu-subdominio-del-tunel.example.com" \\');
+    console.log(`      TUNNEL_COMMAND="${TUNNEL_COMMAND}" npm start`);
+  } else {
+    console.log('   No hay un túnel configurado todavía.');
+    console.log('   Puedes arrancar así si ya conoces la URL final del túnel:');
+    console.log('   PUBLIC_URL="https://tu-subdominio-del-tunel.example.com" npm start');
+    console.log('   O añadir también TUNNEL_COMMAND para mostrar el comando recomendado.');
+  }
+
+  console.log('\n🔗 Fallback por red local:');
+  console.log(`   → ${localHttpsUrl}`);
+  console.log('\n⚠️  El acceso por IP local usa un certificado autofirmado.');
+  console.log('   En ese caso, el móvil puede mostrar un aviso de seguridad.\n');
+}
 
 httpServer.listen(PORT_HTTP, () => {
   console.log(`\n🚗 SmartPark - Acceso desde este ordenador:`);
-  console.log(`   → http://localhost:${PORT_HTTP}/conductor.html`);
+  console.log(`   → ${localHttpUrl}`);
 });
 
 httpsServer.listen(PORT_HTTPS, () => {
-  console.log(`\n📱 ACCESO DESDE EL MÓVIL (Recomendado):`);
-  console.log(`   1. Abre otra terminal y ejecuta:`);
-  console.log(`      ssh -R 80:localhost:3000 serveo.net`);
-  console.log(`   2. El túnel te dará una URL (ej: https://xxxx.serveo.net)`);
-  console.log(`   3. ¡Ábrela en tu móvil! (Ahora te redirigirá automáticamente)`);
-  console.log(`\n🔗 Acceso por IP local (Si falla el túnel):`);
-  console.log(`   → https://${localIP}:${PORT_HTTPS}/conductor.html`);
-  console.log(`\n⚠️  En el móvil, ignora el aviso de "Sitio no seguro".\n`);
+  logMobileAccessInfo();
 });
