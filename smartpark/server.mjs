@@ -24,6 +24,13 @@ io.attach(httpsServer);
 const PORT_HTTP = 3000;
 const PORT_HTTPS = 3443;
 
+// Redirigir la raíz a la página del conductor
+app.get('/', (req, res) => {
+  res.redirect('/conductor.html');
+});
+
+app.use(express.static('public'));
+
 // Datos de los parkings en memoria (con coordenadas en el campus / ciudad)
 const parkingData = [
   {
@@ -379,10 +386,12 @@ httpServer.listen(PORT_HTTP, () => {
 });
 
 httpsServer.listen(PORT_HTTPS, () => {
-  console.log(`\n📱 Acceso desde el Móvil (Recomendado):`);
-  console.log(`   1. Abre otra terminal y escribe: ssh -R 80:localhost:${PORT_HTTP} serveo.net`);
-  console.log(`   2. Entra en la URL del túnel acabada en /conductor.html`);
-  console.log(`\n🔗 Acceso por IP local (Solo si el Firewall lo permite):`);
+  console.log(`\n📱 ACCESO DESDE EL MÓVIL (Recomendado):`);
+  console.log(`   1. Abre otra terminal y ejecuta:`);
+  console.log(`      ssh -R 80:localhost:3000 serveo.net`);
+  console.log(`   2. El túnel te dará una URL (ej: https://xxxx.serveo.net)`);
+  console.log(`   3. ¡Ábrela en tu móvil! (Ahora te redirigirá automáticamente)`);
+  console.log(`\n🔗 Acceso por IP local (Si falla el túnel):`);
   console.log(`   → https://${localIP}:${PORT_HTTPS}/conductor.html`);
-  console.log(`\n⚠️  En el móvil, ignora la advertencia de certificado "No seguro".\n`);
+  console.log(`\n⚠️  En el móvil, ignora el aviso de "Sitio no seguro".\n`);
 });
